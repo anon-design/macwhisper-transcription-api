@@ -36,6 +36,8 @@ class TranscriptionJob:
     completed_at: Optional[float] = None
     result: Optional[Dict] = None
     error: Optional[str] = None
+    retry_count: int = 0  # Número de veces que se ha reintentado
+    file_size_mb: float = 0.0  # Tamaño del archivo en MB
 
     def get_age(self) -> float:
         """Retorna la edad del job en segundos"""
@@ -58,7 +60,9 @@ class TranscriptionJob:
             "processing_time": self.get_processing_time(),
             "age": self.get_age(),
             "result": self.result,
-            "error": self.error
+            "error": self.error,
+            "retry_count": self.retry_count,
+            "file_size_mb": self.file_size_mb
         }
 
 
@@ -222,6 +226,50 @@ class JobQueue:
             "max_concurrent_jobs": config.MAX_CONCURRENT_JOBS,
             "status_counts": status_counts
         }
+
+    def get_job_history(self, limit: int = 100) -> list[Dict]:
+        """
+        Obtiene el historial de jobs, ordenados por fecha de creación (más recientes primero)
+
+        Args:
+            limit: Número máximo de jobs a retornar
+
+        Returns:
+            list[Dict]: Lista de jobs en formato diccionario
+        """
+        # Ordenar por created_at descendente
+        sorted_jobs = sorted(
+            self.jobs.values(),
+            key=lambda job: job.created_at,
+            reverse=True
+        )
+
+        # Limitar resultados
+        limited_jobs = sorted_jobs[:limit]
+
+        return [job.to_dict() for job in limited_jobs]
+
+    def can_retry(self, job_id: str) -> bool:
+        """
+        Verifica si un job puede ser reintentado
+
+        Args:
+            job_id: ID del job
+
+        Returns:
+            bool: True si el job puede ser reintentado
+        """
+        job = self.get_job(job_id)
+
+        if not job:
+            return False
+
+        # Solo reintentar jobs con timeout
+        if job.status != JobStatus.TIMEOUT:
+            return False
+
+        # Verificar que no se haya excedido el límite de reintentos
+        return job.retry_count < config.MAX_RETRIES
 
 
 # Global queue instance

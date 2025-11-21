@@ -20,6 +20,7 @@ from src.validators import validate_transcription_request, ValidationError
 from src.rate_limiter import RateLimiter
 from src.logger import get_logger
 from src import config
+from src import monitoring
 
 # Logger y rate limiter globales
 logger = get_logger()
@@ -148,6 +149,23 @@ async def handle_transcribe(request):
                         break
                     f.write(chunk)
 
+            # Verificar que MacWhisper esté corriendo antes de procesar
+            is_running, pid = monitoring.is_macwhisper_running()
+            if not is_running:
+                return web.json_response(
+                    {
+                        "success": False,
+                        "error": "MacWhisper is not running. Please start MacWhisper app.",
+                        "code": "MACWHISPER_NOT_RUNNING"
+                    },
+                    status=503
+                )
+
+            logger.info(
+                "MacWhisper health check passed",
+                pid=pid
+            )
+
             # Validar archivo
             validation = validate_transcription_request(temp_path, original_filename)
 
@@ -157,25 +175,40 @@ async def handle_transcribe(request):
                     status=400
                 )
 
+            file_size_mb = validation['file_size_mb']
+
             logger.info(
                 "Audio file validated",
                 format=validation['format'],
-                size_mb=validation['file_size_mb'],
+                size_mb=file_size_mb,
                 sync_mode=wait_for_result
             )
 
             # Crear job y agregarlo a la cola
             job_id = await job_queue.create_job(temp_path, original_filename)
 
+            # Actualizar file_size_mb en el job
+            job = job_queue.get_job(job_id)
+            if job:
+                job.file_size_mb = file_size_mb
+
             # Iniciar procesamiento en background
             asyncio.create_task(process_job(job_id, temp_path, original_filename))
 
             # MODO SINCRÓNICO: Esperar hasta que complete
             if wait_for_result:
-                logger.info(f"Synchronous mode: waiting for job to complete", job_id=job_id)
+                # Calcular timeout dinámico basado en tamaño del archivo
+                dynamic_timeout = monitoring.calculate_dynamic_timeout(file_size_mb)
+
+                logger.info(
+                    f"Synchronous mode: waiting for job to complete",
+                    job_id=job_id,
+                    file_size_mb=file_size_mb,
+                    dynamic_timeout=dynamic_timeout
+                )
 
                 poll_interval = 0.5  # Polling cada 0.5 segundos
-                max_wait = config.JOB_TIMEOUT
+                max_wait = dynamic_timeout
                 elapsed = 0.0
 
                 while elapsed < max_wait:
@@ -316,29 +349,85 @@ async def handle_queue_status(request):
     })
 
 
-async def handle_health(request):
-    """Endpoint GET /health - Health check"""
+async def handle_job_history(request):
+    """
+    Endpoint GET /jobs/history - Historial de jobs
+
+    Query params:
+    - limit: Número máximo de jobs a retornar (default: 100, max: 500)
+    """
+    try:
+        limit = int(request.query.get('limit', '100'))
+        limit = min(limit, 500)  # Máximo 500 jobs
+    except ValueError:
+        limit = 100
+
+    jobs = job_queue.get_job_history(limit=limit)
+
     return web.json_response({
-        "status": "ok",
+        "success": True,
+        "jobs": jobs,
+        "count": len(jobs),
+        "limit": limit
+    })
+
+
+async def handle_health(request):
+    """Endpoint GET /health - Health check mejorado con estado de MacWhisper"""
+
+    # Obtener estado de MacWhisper
+    macwhisper_info = monitoring.get_macwhisper_info()
+
+    # Obtener archivos huérfanos
+    orphaned_info = monitoring.check_orphaned_files()
+
+    # Obtener stats de la carpeta watched
+    folder_stats = monitoring.get_watched_folder_stats()
+
+    # Determinar estado general
+    overall_status = "healthy"
+    warnings = []
+
+    if not macwhisper_info.get("running"):
+        overall_status = "unhealthy"
+        warnings.append("MacWhisper is not running")
+
+    if orphaned_info.get("count", 0) > 0:
+        overall_status = "degraded" if overall_status == "healthy" else overall_status
+        warnings.append(f"{orphaned_info['count']} orphaned files detected")
+
+    return web.json_response({
+        "status": overall_status,
+        "warnings": warnings,
         "model": "MacWhisper (WhisperKit Pro / Whisper Large V3)",
         "backend": "Watched Folders",
         "compute": "MacWhisper App",
+        "macwhisper": macwhisper_info,
+        "orphaned_files": orphaned_info,
+        "watched_folder": folder_stats,
         "features": {
             "watched_folders": True,
             "queue_system": True,
             "rate_limiting": True,
-            "validation": True
+            "validation": True,
+            "auto_retry": True,
+            "dynamic_timeout": True,
+            "file_logging": config.LOG_TO_FILE
         },
         "limits": {
             "max_file_size_mb": config.MAX_FILE_SIZE_MB,
             "max_audio_duration_min": config.MAX_AUDIO_DURATION / 60,
             "rate_limit_per_minute": config.RATE_LIMIT_PER_MINUTE,
             "max_queue_size": config.MAX_QUEUE_SIZE,
-            "max_concurrent_jobs": config.MAX_CONCURRENT_JOBS
+            "max_concurrent_jobs": config.MAX_CONCURRENT_JOBS,
+            "job_timeout_base": config.JOB_TIMEOUT,
+            "job_timeout_max": config.MAX_JOB_TIMEOUT,
+            "max_retries": config.MAX_RETRIES
         },
         "paths": {
             "watched_input": str(config.WATCHED_INPUT_DIR),
-            "watched_output": str(config.WATCHED_OUTPUT_DIR)
+            "watched_output": str(config.WATCHED_OUTPUT_DIR),
+            "log_dir": str(config.LOG_DIR) if config.LOG_TO_FILE else None
         }
     })
 
@@ -359,14 +448,45 @@ async def process_job(job_id: str, temp_file: str, original_filename: str):
     Procesa un job de transcripción en background
 
     Esta función se ejecuta como asyncio task y actualiza el status del job
+    Con soporte para retry automático en caso de timeout
     """
     try:
+        # Obtener job para acceder a file_size_mb y retry_count
+        job = job_queue.get_job(job_id)
+        if not job:
+            logger.error("Job not found", job_id=job_id)
+            return
+
+        logger.info(
+            f"process_job() STARTED",
+            job_id=job_id,
+            filename=original_filename,
+            retry_count=job.retry_count,
+            file_size_mb=job.file_size_mb
+        )
+
+        # Verificar que MacWhisper esté corriendo
+        is_running, pid = monitoring.is_macwhisper_running()
+        if not is_running:
+            logger.error("MacWhisper not running, cannot process job", job_id=job_id)
+            job_queue.update_job_status(
+                job_id,
+                JobStatus.FAILED,
+                error="MacWhisper is not running"
+            )
+            return
+
         # Actualizar status a processing
         job_queue.update_job_status(job_id, JobStatus.PROCESSING)
+        logger.info(f"Job status updated to PROCESSING", job_id=job_id, macwhisper_pid=pid)
 
         # Transcribir usando MacWhisperService
+        logger.info(f"Creating MacWhisperService instance", job_id=job_id)
         service = MacWhisperService()
+
+        logger.info(f"Calling transcribe_async()", job_id=job_id)
         result = await service.transcribe_async(temp_file, job_id, original_filename)
+        logger.info(f"transcribe_async() COMPLETED", job_id=job_id, words=result.get('words', 0))
 
         # Actualizar status a completed
         job_queue.update_job_status(
@@ -376,12 +496,40 @@ async def process_job(job_id: str, temp_file: str, original_filename: str):
         )
 
     except TimeoutError as e:
-        logger.error(f"Job timeout: {e}", job_id=job_id)
+        logger.error(f"Job timeout: {e}", job_id=job_id, retry_count=job.retry_count)
+
+        # Marcar job como timeout
         job_queue.update_job_status(
             job_id,
             JobStatus.TIMEOUT,
             error=str(e)
         )
+
+        # Intentar retry si es posible
+        if job_queue.can_retry(job_id):
+            job.retry_count += 1
+            job.status = JobStatus.PENDING
+            job.started_at = None
+            job.error = None
+
+            logger.info(
+                f"Retrying job (attempt {job.retry_count + 1})",
+                job_id=job_id,
+                retry_count=job.retry_count
+            )
+
+            # Re-procesar el job
+            await asyncio.sleep(2)  # Pequeña pausa antes de retry
+            asyncio.create_task(process_job(job_id, temp_file, original_filename))
+            return  # No limpiar temp_file todavía
+
+        else:
+            logger.error(
+                f"Job exhausted all retries",
+                job_id=job_id,
+                retry_count=job.retry_count,
+                max_retries=config.MAX_RETRIES
+            )
 
     except Exception as e:
         logger.error(f"Job failed: {e}", job_id=job_id)
@@ -393,9 +541,15 @@ async def process_job(job_id: str, temp_file: str, original_filename: str):
         )
 
     finally:
-        # Limpiar archivo temporal
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
+        # Limpiar archivo temporal solo si el job no se va a reintentar
+        job = job_queue.get_job(job_id)
+        if job and job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+        elif job and job.status == JobStatus.TIMEOUT and not job_queue.can_retry(job_id):
+            # Limpiar si timeout y no hay más retries
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
 
 
 def main():
@@ -416,6 +570,7 @@ def main():
     # Registrar rutas
     app.router.add_post('/transcribe', handle_transcribe)
     app.router.add_get('/job/{job_id}', handle_job_status)
+    app.router.add_get('/jobs/history', handle_job_history)
     app.router.add_get('/queue', handle_queue_status)
     app.router.add_get('/health', handle_health)
     app.router.add_get('/rate-limit', handle_rate_limit_status)
@@ -432,9 +587,17 @@ def main():
     print("\nEndpoints:")
     print(f"  - POST http://localhost:{config.PORT}/transcribe (submit job)")
     print(f"  - GET  http://localhost:{config.PORT}/job/{{job_id}} (check status)")
+    print(f"  - GET  http://localhost:{config.PORT}/jobs/history (job history)")
     print(f"  - GET  http://localhost:{config.PORT}/queue (queue stats)")
     print(f"  - GET  http://localhost:{config.PORT}/health (health check)")
     print(f"  - GET  http://localhost:{config.PORT}/rate-limit (rate limit status)")
+    print("\nNew Features:")
+    print(f"  ✅ MacWhisper health checks")
+    print(f"  ✅ Auto-retry on timeout (max {config.MAX_RETRIES} retries)")
+    print(f"  ✅ Dynamic timeout based on file size")
+    print(f"  ✅ Orphaned file detection")
+    print(f"  ✅ File logging to {config.LOG_DIR / 'api.log'}")
+    print(f"  ✅ Job history tracking")
     print("\nWatched Folders:")
     print(f"  - Input: {config.WATCHED_INPUT_DIR}")
     print(f"  - Output: {config.WATCHED_OUTPUT_DIR}")

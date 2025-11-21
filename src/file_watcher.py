@@ -87,17 +87,33 @@ class TranscriptionWatcher:
         try:
             # MacWhisper guarda los .txt en watched_input/, no en watched_output/
             input_dir = config.WATCHED_INPUT_DIR
-            output_files = list(input_dir.glob("*.txt"))
+
+            logger.info(f"DEBUG: input_dir type={type(input_dir)}, value={input_dir}", job_id=job_id)
+            logger.info(f"DEBUG: input_dir.exists()={input_dir.exists()}, is_dir()={input_dir.is_dir()}", job_id=job_id)
+
+            # Use os.listdir() instead of Path.glob() to avoid sandboxing issues
+            all_files = os.listdir(str(input_dir))
+            txt_files = [f for f in all_files if f.endswith('.txt')]
+            output_files = [input_dir / f for f in txt_files]
+
+            logger.info(f"Polling for output: found {len(output_files)} txt files", job_id=job_id)
+
+            if len(output_files) > 0:
+                logger.info(f"DEBUG: Files found: {[f.name for f in output_files]}", job_id=job_id)
 
             # Buscar archivo que contenga el job_id
             for output_file in output_files:
+                logger.info(f"DEBUG: Checking {output_file.name}, stem={output_file.stem}, match={job_id in output_file.stem}", job_id=job_id)
                 if job_id in output_file.stem:
+                    logger.info(f"Match found: {output_file.name}", job_id=job_id)
                     return output_file
 
             return None
 
         except Exception as e:
             logger.error(f"Error finding output file: {e}", job_id=job_id)
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}", job_id=job_id)
             return None
 
     async def _is_file_stable(
