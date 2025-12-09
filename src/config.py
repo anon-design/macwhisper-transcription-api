@@ -12,15 +12,14 @@ BASE_DIR = Path(__file__).parent.parent
 HOST = "0.0.0.0"
 PORT = 3001  # Puerto diferente a Parakeet API (3000)
 
-# Rutas de carpetas vigiladas
-WATCHED_INPUT_DIR = BASE_DIR / "watched_input"
-WATCHED_OUTPUT_DIR = BASE_DIR / "watched_output"
+# Ruta de carpeta vigilada (MacWhisper guarda los .txt en el mismo folder)
+WATCHED_FOLDER = BASE_DIR / "watched_input"
 
 # MacWhisper Configuration
 # Nota: Estos valores deben configurarse manualmente en MacWhisper Settings
-# - Watch Folder: {WATCHED_INPUT_DIR}
+# - Watch Folder: {WATCHED_FOLDER}
 # - Output Format: Plain Text (.txt)
-# - Output Location: {WATCHED_OUTPUT_DIR} (si es configurable)
+# - Output Location: Same as source (MacWhisper guarda el .txt junto al audio)
 # - Auto-Transcribe: Enabled
 
 # Queue System

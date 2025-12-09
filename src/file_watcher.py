@@ -15,15 +15,15 @@ logger = get_logger()
 
 class TranscriptionWatcher:
     """
-    Monitorea la carpeta de output esperando que aparezcan archivos de transcripción
+    Monitorea la carpeta watched esperando que aparezcan archivos de transcripción
 
-    MacWhisper deposita archivos .txt en la carpeta de output cuando termina.
+    MacWhisper deposita archivos .txt en la MISMA carpeta que el audio.
     Esta clase hace polling para detectarlos.
     """
 
-    def __init__(self, output_dir: Path = config.WATCHED_OUTPUT_DIR):
-        self.output_dir = output_dir
-        logger.info("TranscriptionWatcher initialized", output_dir=str(output_dir))
+    def __init__(self):
+        self.watched_folder = config.WATCHED_FOLDER
+        logger.info("TranscriptionWatcher initialized", watched_folder=str(self.watched_folder))
 
     async def wait_for_output(
         self,
@@ -79,15 +79,13 @@ class TranscriptionWatcher:
         """
         Busca el archivo de output correspondiente al job_id
 
-        MacWhisper guarda los .txt en la MISMA carpeta que el audio (watched_input/)
-        en lugar de en una carpeta separada de output.
+        MacWhisper guarda los .txt en la MISMA carpeta que el audio.
 
         Buscamos por job_id que está incluido en el nombre del archivo
         """
         try:
-            # MacWhisper guarda los .txt en watched_input/, no en watched_output/
-            input_dir = config.WATCHED_INPUT_DIR
-            output_files = list(input_dir.glob("*.txt"))
+            # MacWhisper guarda los .txt en la misma carpeta del audio
+            output_files = list(self.watched_folder.glob("*.txt"))
 
             # Buscar archivo que contenga el job_id
             for output_file in output_files:
@@ -156,18 +154,17 @@ class TranscriptionWatcher:
 
     def cleanup_files(self, job_id: str):
         """
-        Limpia archivos input y output de un job
+        Limpia archivos de audio y transcripción de un job
 
         Args:
             job_id: UUID del job
         """
         try:
-            # Limpiar todos los archivos (audio + .txt) de la carpeta watched_input
-            # MacWhisper guarda ambos en la misma carpeta
-            input_files = list(config.WATCHED_INPUT_DIR.glob(f"*{job_id}*"))
-            for input_file in input_files:
-                input_file.unlink()
-                logger.info("File cleaned", file=str(input_file))
+            # Limpiar todos los archivos (audio + .txt) de la carpeta watched
+            files = list(self.watched_folder.glob(f"*{job_id}*"))
+            for file in files:
+                file.unlink()
+                logger.info("File cleaned", file=str(file))
 
         except Exception as e:
             logger.error(f"Error cleaning up files: {e}", job_id=job_id)

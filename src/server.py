@@ -337,8 +337,7 @@ async def handle_health(request):
             "max_concurrent_jobs": config.MAX_CONCURRENT_JOBS
         },
         "paths": {
-            "watched_input": str(config.WATCHED_INPUT_DIR),
-            "watched_output": str(config.WATCHED_OUTPUT_DIR)
+            "watched_folder": str(config.WATCHED_FOLDER)
         }
     })
 
@@ -435,10 +434,10 @@ def main():
     print(f"  - GET  http://localhost:{config.PORT}/queue (queue stats)")
     print(f"  - GET  http://localhost:{config.PORT}/health (health check)")
     print(f"  - GET  http://localhost:{config.PORT}/rate-limit (rate limit status)")
-    print("\nWatched Folders:")
-    print(f"  - Input: {config.WATCHED_INPUT_DIR}")
-    print(f"  - Output: {config.WATCHED_OUTPUT_DIR}")
-    print("\nIMPORTANT: Configure MacWhisper to watch the input folder!")
+    print("\nWatched Folder:")
+    print(f"  - {config.WATCHED_FOLDER}")
+    print("\nIMPORTANT: Configure MacWhisper to watch this folder!")
+    print("MacWhisper will save .txt transcriptions in the SAME folder as the audio.")
     print("="*70 + "\n")
 
     # Iniciar tarea de limpieza de jobs viejos cuando el servidor arranque
