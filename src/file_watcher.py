@@ -154,17 +154,41 @@ class TranscriptionWatcher:
 
     def cleanup_files(self, job_id: str):
         """
-        Limpia archivos de audio y transcripción de un job
+        Limpia o archiva archivos de audio y transcripción según configuración
 
         Args:
             job_id: UUID del job
         """
         try:
-            # Limpiar todos los archivos (audio + .txt) de la carpeta watched
             files = list(self.watched_folder.glob(f"*{job_id}*"))
+
             for file in files:
-                file.unlink()
-                logger.info("File cleaned", file=str(file))
+                is_audio = file.suffix.lower() in [f'.{fmt}' for fmt in config.SUPPORTED_FORMATS]
+                is_transcription = file.suffix.lower() == '.txt'
+
+                # Determinar si debemos conservar el archivo
+                should_keep = (
+                    (is_audio and config.KEEP_AUDIO_FILES) or
+                    (is_transcription and config.KEEP_TRANSCRIPTION_FILES)
+                )
+
+                if should_keep:
+                    # Mover a folder de archivo
+                    config.ARCHIVE_FOLDER.mkdir(parents=True, exist_ok=True)
+                    dest = config.ARCHIVE_FOLDER / file.name
+
+                    # Si existe, agregar timestamp para evitar sobrescribir
+                    if dest.exists():
+                        import time
+                        timestamp = int(time.time())
+                        dest = config.ARCHIVE_FOLDER / f"{file.stem}_{timestamp}{file.suffix}"
+
+                    file.rename(dest)
+                    logger.info("File archived", file=str(file), dest=str(dest))
+                else:
+                    # Borrar el archivo
+                    file.unlink()
+                    logger.info("File deleted", file=str(file))
 
         except Exception as e:
             logger.error(f"Error cleaning up files: {e}", job_id=job_id)

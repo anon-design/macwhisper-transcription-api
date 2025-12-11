@@ -337,7 +337,12 @@ async def handle_health(request):
             "max_concurrent_jobs": config.MAX_CONCURRENT_JOBS
         },
         "paths": {
-            "watched_folder": str(config.WATCHED_FOLDER)
+            "watched_folder": str(config.WATCHED_FOLDER),
+            "archive_folder": str(config.ARCHIVE_FOLDER)
+        },
+        "file_retention": {
+            "keep_audio_files": config.KEEP_AUDIO_FILES,
+            "keep_transcription_files": config.KEEP_TRANSCRIPTION_FILES
         }
     })
 
@@ -436,6 +441,11 @@ def main():
     print(f"  - GET  http://localhost:{config.PORT}/rate-limit (rate limit status)")
     print("\nWatched Folder:")
     print(f"  - {config.WATCHED_FOLDER}")
+    print("\nFile Retention:")
+    print(f"  - Keep audio files: {config.KEEP_AUDIO_FILES}")
+    print(f"  - Keep transcription files: {config.KEEP_TRANSCRIPTION_FILES}")
+    if config.KEEP_AUDIO_FILES or config.KEEP_TRANSCRIPTION_FILES:
+        print(f"  - Archive folder: {config.ARCHIVE_FOLDER}")
     print("\nIMPORTANT: Configure MacWhisper to watch this folder!")
     print("MacWhisper will save .txt transcriptions in the SAME folder as the audio.")
     print("="*70 + "\n")

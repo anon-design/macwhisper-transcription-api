@@ -41,6 +41,11 @@ MAX_AUDIO_DURATION = 7200  # 2 horas max (en segundos)
 JOB_RETENTION_TIME = 3600  # 1 hora - tiempo que se mantienen jobs completados en memoria
 CLEANUP_INTERVAL = 300  # 5 minutos - intervalo para limpiar jobs viejos
 
+# File Cleanup Configuration
+KEEP_AUDIO_FILES = True  # True = conservar audios, False = borrarlos después de procesar
+KEEP_TRANSCRIPTION_FILES = True  # True = conservar .txt, False = borrarlos después de procesar
+ARCHIVE_FOLDER = BASE_DIR / "audio_archive"  # Folder donde se mueven los archivos procesados (si KEEP_* = True)
+
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FORMAT = "json"  # json o text

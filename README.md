@@ -176,6 +176,22 @@ Edita `src/config.py` para ajustar:
 - `RATE_LIMIT_PER_MINUTE`: Requests por minuto por IP (default: 10)
 - `MAX_FILE_SIZE_MB`: Tamaño máximo de archivo (default: 500MB)
 
+### Retención de Archivos
+
+Por defecto, **todos los archivos se conservan** después de procesar:
+
+- `KEEP_AUDIO_FILES`: True = conserva audios, False = los borra (default: **True**)
+- `KEEP_TRANSCRIPTION_FILES`: True = conserva .txt, False = los borra (default: **True**)
+- `ARCHIVE_FOLDER`: Carpeta donde se mueven los archivos procesados (default: `audio_archive/`)
+
+Los archivos procesados se mueven automáticamente a `audio_archive/` para mantener organizado el folder `watched_input/`.
+
+**Para borrar archivos después de procesar** (ahorrar espacio en disco):
+```python
+KEEP_AUDIO_FILES = False
+KEEP_TRANSCRIPTION_FILES = False
+```
+
 ## Comparación vs Parakeet MLX API
 
 | Característica | Parakeet MLX API (Puerto 3000) | MacWhisper API (Puerto 3001) |
@@ -199,7 +215,7 @@ Edita `src/config.py` para ajustar:
 6. **MacWhisper** → Guarda `{job_id}_filename.txt` en el **mismo folder** (`watched_input/`)
 7. **API** → Detecta archivo .txt (polling cada 0.5s)
 8. **API** → Lee transcripción y actualiza job status a `completed`
-9. **API** → Limpia ambos archivos (audio + .txt) del folder
+9. **API** → Mueve archivos procesados (audio + .txt) a `audio_archive/` (configurable)
 10. **Cliente** → `GET /job/{job_id}` → Obtiene transcripción completa
 
 ## Troubleshooting
