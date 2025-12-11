@@ -48,11 +48,12 @@ watched_input/*.mp3
 watched_input/*.wav
 watched_input/*.m4a
 watched_input/*.txt
-watched_output/*.txt
+
+# Archive folder (processed files)
+audio_archive/
 
 # Keep directory structure
 !watched_input/.gitkeep
-!watched_output/.gitkeep
 
 # Test files
 test_*.py
