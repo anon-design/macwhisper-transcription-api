@@ -5,13 +5,98 @@ Servicio de transcripción usando MacWhisper Watched Folders
 import os
 import time
 import shutil
+import subprocess
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple
 from src import config
 from src.file_watcher import TranscriptionWatcher
 from src.logger import get_logger
 
 logger = get_logger()
+
+# Formatos que MacWhisper acepta en watched folder (probado)
+MACWHISPER_ACCEPTED_FORMATS = {'mp3', 'm4a', 'wav', 'flac', 'aiff', 'aif'}
+# Formatos que requieren conversión a MP3
+FORMATS_NEEDING_CONVERSION = {'opus', 'ogg', 'webm', 'wma', 'amr', 'aac'}
+
+
+def check_ffmpeg_available() -> bool:
+    """Verifica si ffmpeg está disponible en el sistema"""
+    try:
+        # Probar primero con homebrew path
+        result = subprocess.run(
+            ['/opt/homebrew/bin/ffmpeg', '-version'],
+            capture_output=True,
+            timeout=5
+        )
+        return result.returncode == 0
+    except:
+        try:
+            # Probar path normal
+            result = subprocess.run(
+                ['ffmpeg', '-version'],
+                capture_output=True,
+                timeout=5
+            )
+            return result.returncode == 0
+        except:
+            return False
+
+
+def get_ffmpeg_path() -> str:
+    """Obtiene la ruta de ffmpeg"""
+    if os.path.exists('/opt/homebrew/bin/ffmpeg'):
+        return '/opt/homebrew/bin/ffmpeg'
+    return 'ffmpeg'
+
+
+def convert_to_mp3(input_path: str, output_path: str) -> bool:
+    """
+    Convierte un archivo de audio a MP3 usando ffmpeg
+
+    Args:
+        input_path: Ruta del archivo de entrada
+        output_path: Ruta del archivo MP3 de salida
+
+    Returns:
+        bool: True si la conversión fue exitosa
+    """
+    ffmpeg = get_ffmpeg_path()
+
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg,
+                '-i', input_path,
+                '-acodec', 'libmp3lame',
+                '-q:a', '2',  # Alta calidad
+                '-y',  # Sobrescribir si existe
+                output_path
+            ],
+            capture_output=True,
+            timeout=120  # 2 minutos máximo para conversión
+        )
+
+        if result.returncode == 0:
+            logger.info(
+                "Audio converted to MP3 successfully",
+                input=input_path,
+                output=output_path
+            )
+            return True
+        else:
+            logger.error(
+                "ffmpeg conversion failed",
+                stderr=result.stderr.decode()[:500]
+            )
+            return False
+
+    except subprocess.TimeoutExpired:
+        logger.error("ffmpeg conversion timed out", input=input_path)
+        return False
+    except Exception as e:
+        logger.error(f"ffmpeg conversion error: {e}", input=input_path)
+        return False
 
 
 class MacWhisperService:
@@ -32,9 +117,18 @@ class MacWhisperService:
         # Verificar que la carpeta exista
         config.WATCHED_FOLDER.mkdir(parents=True, exist_ok=True)
 
+        # Verificar ffmpeg para conversión de formatos
+        self.ffmpeg_available = check_ffmpeg_available()
+        if not self.ffmpeg_available:
+            logger.warning(
+                "ffmpeg not available - opus/ogg/webm files will fail. "
+                "Install with: brew install ffmpeg"
+            )
+
         logger.info(
             "MacWhisperService initialized",
-            watched_folder=str(config.WATCHED_FOLDER)
+            watched_folder=str(config.WATCHED_FOLDER),
+            ffmpeg_available=self.ffmpeg_available
         )
 
     def transcribe(self, temp_file_path: str, job_id: str, original_filename: str) -> Dict:
@@ -137,18 +231,41 @@ class MacWhisperService:
         original_filename: str
     ) -> Path:
         """
-        Copia el archivo al watched folder con job_id en el nombre
+        Copia el archivo al watched folder con job_id en el nombre.
+        Si el formato no es aceptado por MacWhisper, lo convierte a MP3.
 
         Formato: {job_id}_{original_filename}
         Ejemplo: abc123-def456_test.mp3
         """
-        ext = Path(original_filename).suffix
-        dest_filename = f"{job_id}_{original_filename}"
-        dest_path = config.WATCHED_FOLDER / dest_filename
+        ext = Path(original_filename).suffix.lower().lstrip('.')
 
-        shutil.copy2(source_path, dest_path)
+        # Verificar si necesita conversión a MP3
+        if ext in FORMATS_NEEDING_CONVERSION:
+            # Cambiar extensión a .mp3
+            base_name = Path(original_filename).stem
+            dest_filename = f"{job_id}_{base_name}.mp3"
+            dest_path = config.WATCHED_FOLDER / dest_filename
 
-        return dest_path
+            logger.info(
+                "Converting audio to MP3 for MacWhisper compatibility",
+                job_id=job_id,
+                original_format=ext,
+                source=source_path
+            )
+
+            # Convertir a MP3
+            if not convert_to_mp3(source_path, str(dest_path)):
+                raise RuntimeError(
+                    f"Failed to convert {ext} to MP3. Ensure ffmpeg is installed."
+                )
+
+            return dest_path
+        else:
+            # Formato aceptado, copiar directamente
+            dest_filename = f"{job_id}_{original_filename}"
+            dest_path = config.WATCHED_FOLDER / dest_filename
+            shutil.copy2(source_path, dest_path)
+            return dest_path
 
     def _wait_for_output_sync(self, job_id: str) -> str:
         """
