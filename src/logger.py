@@ -6,7 +6,10 @@ import logging
 import sys
 import json
 from datetime import datetime
+from pathlib import Path
+from logging.handlers import RotatingFileHandler
 from typing import Optional, Dict, Any
+from src import config
 
 
 class StructuredLogger:
@@ -14,7 +17,7 @@ class StructuredLogger:
 
     def __init__(
         self,
-        name: str = "parakeet-api",
+        name: str = "macwhisper-api",
         level: int = logging.INFO,
         structured: bool = False
     ):
@@ -24,20 +27,49 @@ class StructuredLogger:
 
         # Evitar duplicar handlers
         if not self.logger.handlers:
-            handler = logging.StreamHandler(sys.stdout)
-            handler.setLevel(level)
+            # Handler para stdout (consola)
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(level)
 
             if structured:
-                handler.setFormatter(JSONFormatter())
+                console_handler.setFormatter(JSONFormatter())
             else:
                 # Formato legible para humanos
                 formatter = logging.Formatter(
                     '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S'
                 )
-                handler.setFormatter(formatter)
+                console_handler.setFormatter(formatter)
 
-            self.logger.addHandler(handler)
+            self.logger.addHandler(console_handler)
+
+            # Handler para archivo (si está habilitado)
+            if config.LOG_TO_FILE:
+                try:
+                    # Crear directorio de logs si no existe
+                    config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+                    # Archivo de log con rotación
+                    log_file = config.LOG_DIR / "api.log"
+
+                    file_handler = RotatingFileHandler(
+                        log_file,
+                        maxBytes=config.LOG_FILE_MAX_BYTES,
+                        backupCount=config.LOG_FILE_BACKUP_COUNT
+                    )
+                    file_handler.setLevel(level)
+
+                    # Siempre usar formato estructurado en archivo para facilitar parsing
+                    file_handler.setFormatter(JSONFormatter())
+
+                    self.logger.addHandler(file_handler)
+
+                    # Log sin contexto extra para evitar errores durante inicialización
+                    self.logger.info(f"File logging enabled: {log_file}")
+
+                except Exception as e:
+                    # Si falla el file logging, continuar con console logging
+                    self.logger.error(f"Failed to setup file logging: {e}")
 
     def _log(
         self,

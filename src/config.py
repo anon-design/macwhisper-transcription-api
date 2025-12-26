@@ -12,20 +12,29 @@ BASE_DIR = Path(__file__).parent.parent
 HOST = "0.0.0.0"
 PORT = 3001  # Puerto diferente a Parakeet API (3000)
 
-# Ruta de carpeta vigilada (MacWhisper guarda los .txt en el mismo folder)
-WATCHED_FOLDER = BASE_DIR / "watched_input"
+# Rutas de carpetas vigiladas
+# Usando el folder de MacWhisper del usuario
+# MacWhisper usa el MISMO folder para input y output
+WATCHED_INPUT_DIR = Path("/Users/transcriptionserver/MacwhisperWatched")
+WATCHED_OUTPUT_DIR = Path("/Users/transcriptionserver/MacwhisperWatched")
+
+# Alias para compatibilidad con código existente
+WATCHED_FOLDER = WATCHED_INPUT_DIR
 
 # MacWhisper Configuration
 # Nota: Estos valores deben configurarse manualmente en MacWhisper Settings
-# - Watch Folder: {WATCHED_FOLDER}
+# - Watch Folder: {WATCHED_INPUT_DIR}
 # - Output Format: Plain Text (.txt)
 # - Output Location: Same as source (MacWhisper guarda el .txt junto al audio)
 # - Auto-Transcribe: Enabled
 
 # Queue System
-MAX_CONCURRENT_JOBS = 2  # Máximo de transcripciones simultáneas
+MAX_CONCURRENT_JOBS = 1  # Máximo de transcripciones simultáneas (reducido para evitar sobrecarga)
 MAX_QUEUE_SIZE = 50  # Máximo de jobs en cola
-JOB_TIMEOUT = 600  # 10 minutos timeout por job
+JOB_TIMEOUT = 600  # 10 minutos timeout por job (base - se calcula dinámicamente)
+JOB_TIMEOUT_PER_MB = 10  # Segundos adicionales por MB de archivo
+MAX_JOB_TIMEOUT = 1800  # 30 minutos timeout máximo
+MAX_RETRIES = 2  # Número máximo de reintentos para jobs con timeout
 POLLING_INTERVAL = 0.5  # Segundos entre polls para detectar output
 
 # Rate Limiting
@@ -49,6 +58,10 @@ ARCHIVE_FOLDER = BASE_DIR / "audio_archive"  # Folder donde se mueven los archiv
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FORMAT = "json"  # json o text
+LOG_TO_FILE = True  # Habilitar logging a archivo
+LOG_DIR = BASE_DIR / "logs"
+LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10 MB por archivo
+LOG_FILE_BACKUP_COUNT = 7  # Mantener últimos 7 archivos (1 semana si rotación diaria)
 
 # Output Parser
 # MacWhisper genera archivos .txt con el texto transcrito
