@@ -33,16 +33,28 @@ MAX_CONCURRENT_JOBS = 1  # Máximo de transcripciones simultáneas
 MAX_QUEUE_SIZE = 50  # Máximo de jobs en cola
 
 # Timeouts - SINCRONIZADOS con cliente (Mediclic backend)
-# IMPORTANTE: El cliente tiene timeout de 15 segundos para MacWhisper
-# La API debe responder ANTES de ese timeout para evitar failover innecesario a Groq
 #
-# Para un archivo de 0.1MB: 10 + (0.1 * 15) = 11.5 segundos
-# Para un archivo de 1MB: 10 + (1 * 15) = 25 segundos
-# Para un archivo de 5MB: 10 + (5 * 15) = 85 segundos (capped at 60s)
-MIN_JOB_TIMEOUT = 10  # 10 segundos mínimo (archivos pequeños ~0.1MB)
-JOB_TIMEOUT = 10  # Base timeout en segundos
-JOB_TIMEOUT_PER_MB = 15  # Segundos adicionales por MB
-MAX_JOB_TIMEOUT = 60  # 1 minuto máximo (archivos grandes)
+# ARQUITECTURA DE TIMEOUTS:
+# - Cliente tiene timeout DINÁMICO: base 15s + 30s/MB, max 600s
+# - API tiene timeout DINÁMICO: base 12s + 25s/MB, max 540s
+# - API timeout es ~10% menor para dar margen al cliente
+#
+# EJEMPLOS:
+# ┌──────────────┬──────────┬────────────────┬────────────────┐
+# │ Duración     │ Tamaño   │ Cliente (max)  │ API (interno)  │
+# ├──────────────┼──────────┼────────────────┼────────────────┤
+# │ 1 minuto     │ 0.1 MB   │ 18s            │ 14.5s          │
+# │ 10 minutos   │ 1 MB     │ 45s            │ 37s            │
+# │ 30 minutos   │ 3 MB     │ 105s           │ 87s            │
+# │ 1 hora       │ 6 MB     │ 195s           │ 162s           │
+# │ 2 horas      │ 12 MB    │ 375s           │ 312s           │
+# │ 5+ horas     │ 30+ MB   │ 600s (max)     │ 540s (max)     │
+# └──────────────┴──────────┴────────────────┴────────────────┘
+#
+MIN_JOB_TIMEOUT = 12  # 12 segundos mínimo (archivos pequeños)
+JOB_TIMEOUT = 12  # Base timeout en segundos
+JOB_TIMEOUT_PER_MB = 25  # Segundos adicionales por MB
+MAX_JOB_TIMEOUT = 540  # 9 minutos máximo (10% menos que cliente)
 
 # SIN reintentos internos - el cliente (Mediclic) hace el failover entre servidores
 # Si MacWhisper falla, es mejor retornar error rápido y dejar que el cliente

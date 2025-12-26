@@ -259,13 +259,16 @@ def calculate_dynamic_timeout(file_size_mb: float) -> int:
     """
     Calcula el timeout dinámico basado en el tamaño del archivo.
 
-    SINCRONIZADO con cliente (Mediclic backend) que tiene timeout de 15s.
-    La API debe responder ANTES para evitar failover innecesario a Groq.
+    SINCRONIZADO con cliente (Mediclic backend):
+    - Cliente: base 15s + 30s/MB, max 600s
+    - API: base 12s + 25s/MB, max 540s (~10% menor para dar margen)
 
-    Fórmula: base + (size_mb * per_mb)
-    Ejemplo para 0.1MB: 10 + (0.1 * 15) = 11.5 segundos
-    Ejemplo para 1MB: 10 + (1 * 15) = 25 segundos
-    Ejemplo para 5MB: 10 + (5 * 15) = 85 -> capped at 60 segundos
+    Ejemplos:
+    - 0.1 MB (1 min audio):   12 + (0.1 * 25) = 14.5 segundos
+    - 1 MB (10 min audio):    12 + (1 * 25) = 37 segundos
+    - 3 MB (30 min audio):    12 + (3 * 25) = 87 segundos
+    - 6 MB (1 hora audio):    12 + (6 * 25) = 162 segundos
+    - 30 MB (5+ horas):       12 + (30 * 25) = 762 -> capped at 540s
 
     Args:
         file_size_mb: Tamaño del archivo en MB
