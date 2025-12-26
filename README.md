@@ -22,7 +22,7 @@ Archivo copiado a watched_input/ con UUID en el nombre
     ↓
 MacWhisper detecta y transcribe automáticamente
     ↓
-MacWhisper guarda .txt en watched_output/
+MacWhisper guarda .txt en el MISMO folder (watched_input/)
     ↓
 API detecta resultado y lo asocia con job_id
     ↓
@@ -42,18 +42,20 @@ Este proyecto requiere **MacWhisper Pro** con la funcionalidad de Watched Folder
 1. Abre MacWhisper
 2. Ve a **Settings** → **Watch Folders**
 3. Clic en **"Add Watch Folder"**
-4. Selecciona: `/Users/ivanmorales/Documents/macwhisper-transcription-api/watched_input`
+4. Selecciona la ruta completa al folder: `<tu-path>/Macwhisperapi/watched_input`
+   - Ejemplo: `/Users/JC/Macwhisperapi/watched_input`
 5. Configura **Output Format**: Plain Text (.txt)
-6. **CRÍTICO**: Configura **Output Location** a:
-   - `/Users/ivanmorales/Documents/macwhisper-transcription-api/watched_output`
-   - Si MacWhisper no permite configurar output location, los archivos .txt aparecerán en la misma carpeta que el input
+6. **IMPORTANTE**: Configura **Output Location** a:
+   - **"Same as source"** (Mismo que fuente)
+   - Esto hace que MacWhisper guarde el .txt en el mismo folder que el audio
 7. Activa **"Auto-Transcribe Toggle"**
 8. Mantén MacWhisper **corriendo en background**
 
 ## Instalación
 
 ```bash
-cd /Users/ivanmorales/Documents/macwhisper-transcription-api
+# Clonar o navegar al repositorio
+cd /path/to/Macwhisperapi
 
 # Instalar dependencias
 pip3 install -r requirements.txt
@@ -174,6 +176,22 @@ Edita `src/config.py` para ajustar:
 - `RATE_LIMIT_PER_MINUTE`: Requests por minuto por IP (default: 10)
 - `MAX_FILE_SIZE_MB`: Tamaño máximo de archivo (default: 500MB)
 
+### Retención de Archivos
+
+Por defecto, **todos los archivos se conservan** después de procesar:
+
+- `KEEP_AUDIO_FILES`: True = conserva audios, False = los borra (default: **True**)
+- `KEEP_TRANSCRIPTION_FILES`: True = conserva .txt, False = los borra (default: **True**)
+- `ARCHIVE_FOLDER`: Carpeta donde se mueven los archivos procesados (default: `audio_archive/`)
+
+Los archivos procesados se mueven automáticamente a `audio_archive/` para mantener organizado el folder `watched_input/`.
+
+**Para borrar archivos después de procesar** (ahorrar espacio en disco):
+```python
+KEEP_AUDIO_FILES = False
+KEEP_TRANSCRIPTION_FILES = False
+```
+
 ## Comparación vs Parakeet MLX API
 
 | Característica | Parakeet MLX API (Puerto 3000) | MacWhisper API (Puerto 3001) |
@@ -194,10 +212,11 @@ Edita `src/config.py` para ajustar:
 3. **API** → Copia archivo a `watched_input/{job_id}_filename.mp3`
 4. **MacWhisper** → Detecta archivo nuevo automáticamente
 5. **MacWhisper** → Transcribe en background
-6. **MacWhisper** → Guarda `{job_id}_filename.txt` en `watched_output/`
+6. **MacWhisper** → Guarda `{job_id}_filename.txt` en el **mismo folder** (`watched_input/`)
 7. **API** → Detecta archivo .txt (polling cada 0.5s)
 8. **API** → Lee transcripción y actualiza job status a `completed`
-9. **Cliente** → `GET /job/{job_id}` → Obtiene transcripción completa
+9. **API** → Mueve archivos procesados (audio + .txt) a `audio_archive/` (configurable)
+10. **Cliente** → `GET /job/{job_id}` → Obtiene transcripción completa
 
 ## Troubleshooting
 
@@ -210,9 +229,10 @@ Edita `src/config.py` para ajustar:
 
 ### No se encuentra el archivo de output
 
-- MacWhisper puede guardar el .txt en la misma carpeta que el input
-- Verifica la configuración de "Output Location" en MacWhisper
-- Ajusta `file_watcher.py` si MacWhisper usa un naming diferente
+- Verifica que MacWhisper tenga configurado "Output Location" como **"Same as source"**
+- MacWhisper debe guardar el .txt en el mismo folder que el audio (`watched_input/`)
+- Verifica que el archivo .txt tenga el mismo nombre base que el audio
+- Revisa los logs de la API para ver si detecta el archivo .txt
 
 ### Rate limit exceeded
 

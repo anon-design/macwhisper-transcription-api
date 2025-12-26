@@ -20,23 +20,21 @@ class MacWhisperService:
 
     Flujo:
     1. Recibe archivo temporal
-    2. Lo mueve a watched_input/ con UUID en el nombre
-    3. Espera a que MacWhisper lo procese
-    4. Lee el resultado de watched_output/
+    2. Lo mueve a watched_folder/ con UUID en el nombre
+    3. Espera a que MacWhisper lo procese (genera .txt en el mismo folder)
+    4. Lee el resultado del .txt
     5. Retorna la transcripción
     """
 
     def __init__(self):
         self.watcher = TranscriptionWatcher()
 
-        # Verificar que las carpetas existan
-        config.WATCHED_INPUT_DIR.mkdir(parents=True, exist_ok=True)
-        config.WATCHED_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        # Verificar que la carpeta exista
+        config.WATCHED_FOLDER.mkdir(parents=True, exist_ok=True)
 
         logger.info(
             "MacWhisperService initialized",
-            input_dir=str(config.WATCHED_INPUT_DIR),
-            output_dir=str(config.WATCHED_OUTPUT_DIR)
+            watched_folder=str(config.WATCHED_FOLDER)
         )
 
     def transcribe(self, temp_file_path: str, job_id: str, original_filename: str) -> Dict:
@@ -139,14 +137,14 @@ class MacWhisperService:
         original_filename: str
     ) -> Path:
         """
-        Copia el archivo al watched_input folder con job_id en el nombre
+        Copia el archivo al watched folder con job_id en el nombre
 
         Formato: {job_id}_{original_filename}
         Ejemplo: abc123-def456_test.mp3
         """
         ext = Path(original_filename).suffix
         dest_filename = f"{job_id}_{original_filename}"
-        dest_path = config.WATCHED_INPUT_DIR / dest_filename
+        dest_path = config.WATCHED_FOLDER / dest_filename
 
         shutil.copy2(source_path, dest_path)
 

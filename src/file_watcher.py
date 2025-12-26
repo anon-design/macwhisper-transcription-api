@@ -15,15 +15,15 @@ logger = get_logger()
 
 class TranscriptionWatcher:
     """
-    Monitorea la carpeta de output esperando que aparezcan archivos de transcripción
+    Monitorea la carpeta watched esperando que aparezcan archivos de transcripción
 
-    MacWhisper deposita archivos .txt en la carpeta de output cuando termina.
+    MacWhisper deposita archivos .txt en la MISMA carpeta que el audio.
     Esta clase hace polling para detectarlos.
     """
 
-    def __init__(self, output_dir: Path = config.WATCHED_OUTPUT_DIR):
-        self.output_dir = output_dir
-        logger.info("TranscriptionWatcher initialized", output_dir=str(output_dir))
+    def __init__(self):
+        self.watched_folder = config.WATCHED_FOLDER
+        logger.info("TranscriptionWatcher initialized", watched_folder=str(self.watched_folder))
 
     async def wait_for_output(
         self,
@@ -79,8 +79,7 @@ class TranscriptionWatcher:
         """
         Busca el archivo de output correspondiente al job_id
 
-        MacWhisper guarda los .txt en la MISMA carpeta que el audio (watched_input/)
-        en lugar de en una carpeta separada de output.
+        MacWhisper guarda los .txt en la MISMA carpeta que el audio.
 
         Buscamos por job_id que está incluido en el nombre del archivo
         """
@@ -172,18 +171,41 @@ class TranscriptionWatcher:
 
     def cleanup_files(self, job_id: str):
         """
-        Limpia archivos input y output de un job
+        Limpia o archiva archivos de audio y transcripción según configuración
 
         Args:
             job_id: UUID del job
         """
         try:
-            # Limpiar todos los archivos (audio + .txt) de la carpeta watched_input
-            # MacWhisper guarda ambos en la misma carpeta
-            input_files = list(config.WATCHED_INPUT_DIR.glob(f"*{job_id}*"))
-            for input_file in input_files:
-                input_file.unlink()
-                logger.info("File cleaned", file=str(input_file))
+            files = list(self.watched_folder.glob(f"*{job_id}*"))
+
+            for file in files:
+                is_audio = file.suffix.lower() in [f'.{fmt}' for fmt in config.SUPPORTED_FORMATS]
+                is_transcription = file.suffix.lower() == '.txt'
+
+                # Determinar si debemos conservar el archivo
+                should_keep = (
+                    (is_audio and config.KEEP_AUDIO_FILES) or
+                    (is_transcription and config.KEEP_TRANSCRIPTION_FILES)
+                )
+
+                if should_keep:
+                    # Mover a folder de archivo
+                    config.ARCHIVE_FOLDER.mkdir(parents=True, exist_ok=True)
+                    dest = config.ARCHIVE_FOLDER / file.name
+
+                    # Si existe, agregar timestamp para evitar sobrescribir
+                    if dest.exists():
+                        import time
+                        timestamp = int(time.time())
+                        dest = config.ARCHIVE_FOLDER / f"{file.stem}_{timestamp}{file.suffix}"
+
+                    file.rename(dest)
+                    logger.info("File archived", file=str(file), dest=str(dest))
+                else:
+                    # Borrar el archivo
+                    file.unlink()
+                    logger.info("File deleted", file=str(file))
 
         except Exception as e:
             logger.error(f"Error cleaning up files: {e}", job_id=job_id)

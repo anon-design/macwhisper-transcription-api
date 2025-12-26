@@ -447,6 +447,7 @@ async def process_job(job_id: str, temp_file: str, original_filename: str):
     """
     Procesa un job de transcripción en background
 
+<<<<<<< HEAD
     Esta función se ejecuta como asyncio task y actualiza el status del job
     Con soporte para retry automático en caso de timeout
     """
@@ -487,13 +488,31 @@ async def process_job(job_id: str, temp_file: str, original_filename: str):
         logger.info(f"Calling transcribe_async()", job_id=job_id)
         result = await service.transcribe_async(temp_file, job_id, original_filename)
         logger.info(f"transcribe_async() COMPLETED", job_id=job_id, words=result.get('words', 0))
+=======
+    Esta función se ejecuta como asyncio task y actualiza el status del job.
 
-        # Actualizar status a completed
-        job_queue.update_job_status(
-            job_id,
-            JobStatus.COMPLETED,
-            result=result
-        )
+    FIX: Usa semáforo para limitar concurrencia real - evita que múltiples jobs
+    se procesen simultáneamente cuando MacWhisper solo puede manejar uno a la vez.
+    """
+    try:
+        # FIX: Esperar a que haya slot disponible (respeta MAX_CONCURRENT_JOBS)
+        async with job_queue.semaphore:
+            # Actualizar status a processing (solo cuando tenemos el slot)
+            job_queue.update_job_status(job_id, JobStatus.PROCESSING)
+
+            logger.info(f"Job acquired semaphore, starting transcription", job_id=job_id)
+>>>>>>> fe4ceb31c6faf2828dea4f7ed01533807e376610
+
+            # Transcribir usando MacWhisperService
+            service = MacWhisperService()
+            result = await service.transcribe_async(temp_file, job_id, original_filename)
+
+            # Actualizar status a completed
+            job_queue.update_job_status(
+                job_id,
+                JobStatus.COMPLETED,
+                result=result
+            )
 
     except TimeoutError as e:
         logger.error(f"Job timeout: {e}", job_id=job_id, retry_count=job.retry_count)
@@ -591,6 +610,7 @@ def main():
     print(f"  - GET  http://localhost:{config.PORT}/queue (queue stats)")
     print(f"  - GET  http://localhost:{config.PORT}/health (health check)")
     print(f"  - GET  http://localhost:{config.PORT}/rate-limit (rate limit status)")
+<<<<<<< HEAD
     print("\nNew Features:")
     print(f"  ✅ MacWhisper health checks")
     print(f"  ✅ Auto-retry on timeout (max {config.MAX_RETRIES} retries)")
@@ -602,6 +622,17 @@ def main():
     print(f"  - Input: {config.WATCHED_INPUT_DIR}")
     print(f"  - Output: {config.WATCHED_OUTPUT_DIR}")
     print("\nIMPORTANT: Configure MacWhisper to watch the input folder!")
+=======
+    print("\nWatched Folder:")
+    print(f"  - {config.WATCHED_FOLDER}")
+    print("\nFile Retention:")
+    print(f"  - Keep audio files: {config.KEEP_AUDIO_FILES}")
+    print(f"  - Keep transcription files: {config.KEEP_TRANSCRIPTION_FILES}")
+    if config.KEEP_AUDIO_FILES or config.KEEP_TRANSCRIPTION_FILES:
+        print(f"  - Archive folder: {config.ARCHIVE_FOLDER}")
+    print("\nIMPORTANT: Configure MacWhisper to watch this folder!")
+    print("MacWhisper will save .txt transcriptions in the SAME folder as the audio.")
+>>>>>>> fe4ceb31c6faf2828dea4f7ed01533807e376610
     print("="*70 + "\n")
 
     # Iniciar tarea de limpieza de jobs viejos cuando el servidor arranque

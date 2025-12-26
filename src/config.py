@@ -20,9 +20,9 @@ WATCHED_OUTPUT_DIR = Path("/Users/transcriptionserver/MacwhisperWatched")
 
 # MacWhisper Configuration
 # Nota: Estos valores deben configurarse manualmente en MacWhisper Settings
-# - Watch Folder: {WATCHED_INPUT_DIR}
+# - Watch Folder: {WATCHED_FOLDER}
 # - Output Format: Plain Text (.txt)
-# - Output Location: {WATCHED_OUTPUT_DIR} (si es configurable)
+# - Output Location: Same as source (MacWhisper guarda el .txt junto al audio)
 # - Auto-Transcribe: Enabled
 
 # Queue System
@@ -46,6 +46,11 @@ MAX_AUDIO_DURATION = 7200  # 2 horas max (en segundos)
 # Job Management
 JOB_RETENTION_TIME = 3600  # 1 hora - tiempo que se mantienen jobs completados en memoria
 CLEANUP_INTERVAL = 300  # 5 minutos - intervalo para limpiar jobs viejos
+
+# File Cleanup Configuration
+KEEP_AUDIO_FILES = True  # True = conservar audios, False = borrarlos después de procesar
+KEEP_TRANSCRIPTION_FILES = True  # True = conservar .txt, False = borrarlos después de procesar
+ARCHIVE_FOLDER = BASE_DIR / "audio_archive"  # Folder donde se mueven los archivos procesados (si KEEP_* = True)
 
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
