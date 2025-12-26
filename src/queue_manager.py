@@ -28,7 +28,7 @@ class JobStatus(str, Enum):
 class TranscriptionJob:
     """Representa un job de transcripción"""
     job_id: str
-    file_path: str  # Ruta temporal del archivo
+    file_path: str  # Ruta del archivo en watched folder
     original_filename: str
     status: JobStatus = JobStatus.PENDING
     created_at: float = field(default_factory=time.time)
@@ -38,6 +38,7 @@ class TranscriptionJob:
     error: Optional[str] = None
     retry_count: int = 0  # Número de veces que se ha reintentado
     file_size_mb: float = 0.0  # Tamaño del archivo en MB
+    temp_file_path: Optional[str] = None  # Ruta al archivo temporal original
 
     def get_age(self) -> float:
         """Retorna la edad del job en segundos"""

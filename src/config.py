@@ -18,9 +18,12 @@ PORT = 3001  # Puerto diferente a Parakeet API (3000)
 WATCHED_INPUT_DIR = Path("/Users/transcriptionserver/MacwhisperWatched")
 WATCHED_OUTPUT_DIR = Path("/Users/transcriptionserver/MacwhisperWatched")
 
+# Alias para compatibilidad con código existente
+WATCHED_FOLDER = WATCHED_INPUT_DIR
+
 # MacWhisper Configuration
 # Nota: Estos valores deben configurarse manualmente en MacWhisper Settings
-# - Watch Folder: {WATCHED_FOLDER}
+# - Watch Folder: {WATCHED_INPUT_DIR}
 # - Output Format: Plain Text (.txt)
 # - Output Location: Same as source (MacWhisper guarda el .txt junto al audio)
 # - Auto-Transcribe: Enabled
