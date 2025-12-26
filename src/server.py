@@ -362,22 +362,29 @@ async def process_job(job_id: str, temp_file: str, original_filename: str):
     """
     Procesa un job de transcripción en background
 
-    Esta función se ejecuta como asyncio task y actualiza el status del job
+    Esta función se ejecuta como asyncio task y actualiza el status del job.
+
+    FIX: Usa semáforo para limitar concurrencia real - evita que múltiples jobs
+    se procesen simultáneamente cuando MacWhisper solo puede manejar uno a la vez.
     """
     try:
-        # Actualizar status a processing
-        job_queue.update_job_status(job_id, JobStatus.PROCESSING)
+        # FIX: Esperar a que haya slot disponible (respeta MAX_CONCURRENT_JOBS)
+        async with job_queue.semaphore:
+            # Actualizar status a processing (solo cuando tenemos el slot)
+            job_queue.update_job_status(job_id, JobStatus.PROCESSING)
 
-        # Transcribir usando MacWhisperService
-        service = MacWhisperService()
-        result = await service.transcribe_async(temp_file, job_id, original_filename)
+            logger.info(f"Job acquired semaphore, starting transcription", job_id=job_id)
 
-        # Actualizar status a completed
-        job_queue.update_job_status(
-            job_id,
-            JobStatus.COMPLETED,
-            result=result
-        )
+            # Transcribir usando MacWhisperService
+            service = MacWhisperService()
+            result = await service.transcribe_async(temp_file, job_id, original_filename)
+
+            # Actualizar status a completed
+            job_queue.update_job_status(
+                job_id,
+                JobStatus.COMPLETED,
+                result=result
+            )
 
     except TimeoutError as e:
         logger.error(f"Job timeout: {e}", job_id=job_id)
