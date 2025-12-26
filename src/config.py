@@ -15,8 +15,8 @@ PORT = 3001  # Puerto diferente a Parakeet API (3000)
 # Rutas de carpetas vigiladas
 # Usando el folder de MacWhisper del usuario
 # MacWhisper usa el MISMO folder para input y output
-WATCHED_INPUT_DIR = Path("/Users/transcriptionserver/MacwhisperWatched")
-WATCHED_OUTPUT_DIR = Path("/Users/transcriptionserver/MacwhisperWatched")
+WATCHED_INPUT_DIR = Path("/Users/JC/MacwhisperWatched")
+WATCHED_OUTPUT_DIR = Path("/Users/JC/MacwhisperWatched")
 
 # Alias para compatibilidad con código existente
 WATCHED_FOLDER = WATCHED_INPUT_DIR
