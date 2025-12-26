@@ -171,15 +171,20 @@ Edita `src/config.py`:
 | `PORT` | 3001 | Puerto del servidor |
 | `MAX_CONCURRENT_JOBS` | 1 | Transcripciones simultáneas |
 | `MAX_QUEUE_SIZE` | 50 | Tamaño máximo de cola |
-| `MIN_JOB_TIMEOUT` | 60 | Timeout mínimo (1 minuto) |
-| `JOB_TIMEOUT` | 60 | Timeout base (segundos) |
-| `JOB_TIMEOUT_PER_MB` | 30 | Segundos extra por MB |
-| `MAX_JOB_TIMEOUT` | 600 | Timeout máximo (10 min) |
-| `MAX_RETRIES` | 2 | Reintentos en timeout |
+| `MIN_JOB_TIMEOUT` | 10 | Timeout mínimo (10 segundos) |
+| `JOB_TIMEOUT` | 10 | Timeout base (segundos) |
+| `JOB_TIMEOUT_PER_MB` | 15 | Segundos extra por MB |
+| `MAX_JOB_TIMEOUT` | 60 | Timeout máximo (1 minuto) |
+| `MAX_RETRIES` | 0 | Sin reintentos (cliente hace failover) |
 | `RATE_LIMIT_PER_MINUTE` | 10 | Requests/min por IP |
 | `MAX_FILE_SIZE_MB` | 500 | Tamaño máximo de archivo |
 | `KEEP_AUDIO_FILES` | True | Conservar audios procesados |
 | `KEEP_TRANSCRIPTION_FILES` | True | Conservar .txt procesados |
+
+**IMPORTANTE:** Los timeouts están sincronizados con el cliente (Mediclic backend):
+- Cliente espera 15 segundos por servidor MacWhisper
+- API debe responder en <15s para evitar failover innecesario a Groq
+- Si MacWhisper falla, retornar error rápido para que el cliente haga failover
 
 ### Conversión Automática de Formatos
 

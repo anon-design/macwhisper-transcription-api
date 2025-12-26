@@ -257,11 +257,15 @@ def get_watched_folder_stats() -> Dict:
 
 def calculate_dynamic_timeout(file_size_mb: float) -> int:
     """
-    Calcula el timeout dinámico basado en el tamaño del archivo
+    Calcula el timeout dinámico basado en el tamaño del archivo.
+
+    SINCRONIZADO con cliente (Mediclic backend) que tiene timeout de 15s.
+    La API debe responder ANTES para evitar failover innecesario a Groq.
 
     Fórmula: base + (size_mb * per_mb)
-    Ejemplo para 1MB: 60 + (1 * 30) = 90 segundos
-    Ejemplo para 10MB: 60 + (10 * 30) = 360 segundos
+    Ejemplo para 0.1MB: 10 + (0.1 * 15) = 11.5 segundos
+    Ejemplo para 1MB: 10 + (1 * 15) = 25 segundos
+    Ejemplo para 5MB: 10 + (5 * 15) = 85 -> capped at 60 segundos
 
     Args:
         file_size_mb: Tamaño del archivo en MB

@@ -32,15 +32,22 @@ WATCHED_FOLDER = WATCHED_INPUT_DIR
 MAX_CONCURRENT_JOBS = 1  # Máximo de transcripciones simultáneas
 MAX_QUEUE_SIZE = 50  # Máximo de jobs en cola
 
-# Timeouts - OPTIMIZADOS para respuesta rápida
-# Para un archivo de 1MB: 60 + (1 * 30) = 90 segundos
-# Para un archivo de 10MB: 60 + (10 * 30) = 360 segundos (6 min)
-MIN_JOB_TIMEOUT = 60  # 1 minuto mínimo (archivos pequeños)
-JOB_TIMEOUT = 60  # Base timeout en segundos (era 600)
-JOB_TIMEOUT_PER_MB = 30  # Segundos adicionales por MB (era 10)
-MAX_JOB_TIMEOUT = 600  # 10 minutos máximo (era 1800)
+# Timeouts - SINCRONIZADOS con cliente (Mediclic backend)
+# IMPORTANTE: El cliente tiene timeout de 15 segundos para MacWhisper
+# La API debe responder ANTES de ese timeout para evitar failover innecesario a Groq
+#
+# Para un archivo de 0.1MB: 10 + (0.1 * 15) = 11.5 segundos
+# Para un archivo de 1MB: 10 + (1 * 15) = 25 segundos
+# Para un archivo de 5MB: 10 + (5 * 15) = 85 segundos (capped at 60s)
+MIN_JOB_TIMEOUT = 10  # 10 segundos mínimo (archivos pequeños ~0.1MB)
+JOB_TIMEOUT = 10  # Base timeout en segundos
+JOB_TIMEOUT_PER_MB = 15  # Segundos adicionales por MB
+MAX_JOB_TIMEOUT = 60  # 1 minuto máximo (archivos grandes)
 
-MAX_RETRIES = 2  # Número máximo de reintentos para jobs con timeout
+# SIN reintentos internos - el cliente (Mediclic) hace el failover entre servidores
+# Si MacWhisper falla, es mejor retornar error rápido y dejar que el cliente
+# haga failover a M1 Pro o Groq, en lugar de reintentar internamente
+MAX_RETRIES = 0
 POLLING_INTERVAL = 0.5  # Segundos entre polls para detectar output
 
 # Rate Limiting
