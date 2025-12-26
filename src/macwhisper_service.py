@@ -172,7 +172,8 @@ class MacWhisperService:
         self,
         temp_file_path: str,
         job_id: str,
-        original_filename: str
+        original_filename: str,
+        timeout: float = None
     ) -> Dict:
         """
         Versión asíncrona de transcribe() para uso con aiohttp
@@ -181,11 +182,15 @@ class MacWhisperService:
             temp_file_path: Ruta al archivo temporal
             job_id: UUID del job
             original_filename: Nombre original del archivo
+            timeout: Timeout dinámico en segundos (opcional)
 
         Returns:
             Dict: Resultado de la transcripción
         """
         start_time = time.time()
+
+        # Usar timeout dinámico si se proporciona
+        effective_timeout = timeout if timeout is not None else config.JOB_TIMEOUT
 
         try:
             # 1. Mover archivo a watched_input
@@ -198,15 +203,20 @@ class MacWhisperService:
             logger.info(
                 "File copied to watched folder",
                 job_id=job_id,
-                input_file=str(input_file)
+                input_file=str(input_file),
+                timeout=effective_timeout
             )
 
-            # 2. Esperar output (async)
-            output_file = await self.watcher.wait_for_output(job_id)
+            # 2. Esperar output (async) con timeout dinámico y verificación de archivo fuente
+            output_file = await self.watcher.wait_for_output(
+                job_id,
+                source_file=str(input_file),  # Para detectar si se borra
+                timeout=effective_timeout
+            )
 
             if not output_file:
                 raise TimeoutError(
-                    f"MacWhisper did not produce output within {config.JOB_TIMEOUT}s"
+                    f"MacWhisper did not produce output within {effective_timeout}s"
                 )
 
             # 3. Leer resultado

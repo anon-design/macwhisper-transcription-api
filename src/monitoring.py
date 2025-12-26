@@ -259,15 +259,23 @@ def calculate_dynamic_timeout(file_size_mb: float) -> int:
     """
     Calcula el timeout dinámico basado en el tamaño del archivo
 
+    Fórmula: base + (size_mb * per_mb)
+    Ejemplo para 1MB: 60 + (1 * 30) = 90 segundos
+    Ejemplo para 10MB: 60 + (10 * 30) = 360 segundos
+
     Args:
         file_size_mb: Tamaño del archivo en MB
 
     Returns:
-        int: Timeout en segundos
+        int: Timeout en segundos (entre MIN y MAX)
     """
     base_timeout = config.JOB_TIMEOUT
     extra_time = file_size_mb * config.JOB_TIMEOUT_PER_MB
     timeout = int(base_timeout + extra_time)
+
+    # Asegurar mínimo (para archivos muy pequeños)
+    min_timeout = getattr(config, 'MIN_JOB_TIMEOUT', 60)
+    timeout = max(timeout, min_timeout)
 
     # No exceder el máximo
     return min(timeout, config.MAX_JOB_TIMEOUT)

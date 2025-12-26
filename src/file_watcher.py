@@ -28,18 +28,23 @@ class TranscriptionWatcher:
     async def wait_for_output(
         self,
         job_id: str,
-        timeout: float = config.JOB_TIMEOUT
+        source_file: str = None,
+        timeout: float = None
     ) -> Optional[str]:
         """
         Espera a que aparezca el archivo de transcripción para un job específico
 
         Args:
             job_id: UUID del job
-            timeout: Timeout en segundos
+            source_file: Ruta al archivo de audio fuente (para verificar que siga existiendo)
+            timeout: Timeout en segundos (usa config.JOB_TIMEOUT si no se especifica)
 
         Returns:
-            Optional[str]: Ruta al archivo de transcripción si se encontró, None si timeout
+            Optional[str]: Ruta al archivo de transcripción si se encontró, None si timeout/error
         """
+        if timeout is None:
+            timeout = config.JOB_TIMEOUT
+
         start_time = time.time()
         poll_interval = config.POLLING_INTERVAL
 
@@ -47,10 +52,23 @@ class TranscriptionWatcher:
             "Waiting for transcription output",
             job_id=job_id,
             timeout=timeout,
-            poll_interval=poll_interval
+            poll_interval=poll_interval,
+            source_file=source_file
         )
 
         while (time.time() - start_time) < timeout:
+            # EDGE CASE: Verificar que el archivo fuente siga existiendo
+            # Si fue borrado, no tiene sentido seguir esperando
+            if source_file and not os.path.exists(source_file):
+                elapsed = time.time() - start_time
+                logger.error(
+                    "Source file disappeared while waiting for output",
+                    job_id=job_id,
+                    source_file=source_file,
+                    elapsed=round(elapsed, 2)
+                )
+                return None
+
             # Buscar archivo que contenga el job_id en el nombre
             output_file = self._find_output_file(job_id)
 
@@ -61,17 +79,19 @@ class TranscriptionWatcher:
                         "Transcription output found",
                         job_id=job_id,
                         file=str(output_file),
-                        wait_time=time.time() - start_time
+                        wait_time=round(time.time() - start_time, 2)
                     )
                     return str(output_file)
 
             # Esperar antes del siguiente poll
             await asyncio.sleep(poll_interval)
 
+        elapsed = time.time() - start_time
         logger.warning(
             "Timeout waiting for transcription output",
             job_id=job_id,
-            timeout=timeout
+            timeout=timeout,
+            elapsed=round(elapsed, 2)
         )
         return None
 

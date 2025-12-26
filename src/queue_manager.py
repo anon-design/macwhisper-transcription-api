@@ -72,24 +72,49 @@ class JobQueue:
     Gestor de cola de jobs de transcripción con control de concurrencia
 
     Features:
-    - asyncio.Queue para manejo asíncrono
-    - Semaphore para limitar concurrencia
+    - Semaphore para limitar concurrencia (lazy initialization)
     - Tracking de jobs en memoria
     - Limpieza automática de jobs viejos
+
+    FIX: El semáforo se crea de forma lazy para evitar el error
+    "Task got Future attached to a different loop" que ocurre
+    cuando el semáforo se crea antes de que aiohttp inicie su event loop.
     """
 
     def __init__(self):
-        # Eliminamos asyncio.Queue - solo usamos dict para tracking
-        self.semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_JOBS)
+        # FIX: No crear semáforo aquí - se crea lazy en el event loop correcto
+        self._semaphore: Optional[asyncio.Semaphore] = None
         self.jobs: Dict[str, TranscriptionJob] = {}
         self.workers_running = False
         self._cleanup_task = None
 
         logger.info(
-            "JobQueue initialized",
+            "JobQueue initialized (semaphore will be created lazily)",
             max_queue_size=config.MAX_QUEUE_SIZE,
             max_concurrent_jobs=config.MAX_CONCURRENT_JOBS
         )
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        """
+        Lazy initialization del semáforo.
+        Se crea en el event loop actual cuando se accede por primera vez.
+        Esto evita el error "Task got Future attached to a different loop".
+        """
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_JOBS)
+            logger.info(
+                "Semaphore created lazily in current event loop",
+                max_concurrent_jobs=config.MAX_CONCURRENT_JOBS
+            )
+        return self._semaphore
+
+    def reset_semaphore(self):
+        """
+        Resetea el semáforo. Útil si se necesita recrear en un nuevo event loop.
+        """
+        self._semaphore = None
+        logger.info("Semaphore reset")
 
     async def create_job(self, file_path: str, original_filename: str) -> str:
         """

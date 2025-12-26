@@ -487,11 +487,16 @@ async def handle_health(request):
         overall_status = "degraded" if overall_status == "healthy" else overall_status
         warnings.append(f"{orphaned_info['count']} orphaned files detected")
 
-    # Detectar jobs stuck
-    stuck_count = sum(1 for job in job_queue.jobs.values()
-                     if job.status == JobStatus.PROCESSING
-                     and job.started_at
-                     and (time.time() - job.started_at) > 1800)
+    # Detectar jobs stuck (usando timeout dinámico)
+    stuck_count = 0
+    for job in job_queue.jobs.values():
+        if job.status == JobStatus.PROCESSING and job.started_at:
+            elapsed = time.time() - job.started_at
+            file_size_mb = getattr(job, 'file_size_mb', 1.0)
+            expected_timeout = monitoring.calculate_dynamic_timeout(file_size_mb)
+            # Considerar stuck si excede 1.5x el timeout esperado
+            if elapsed > expected_timeout * 1.5:
+                stuck_count += 1
     if stuck_count > 0:
         overall_status = "degraded" if overall_status == "healthy" else overall_status
         warnings.append(f"{stuck_count} jobs stuck in processing")
@@ -673,9 +678,17 @@ async def process_job(job_id: str, temp_file: str, original_filename: str):
             job_queue.update_job_status(job_id, JobStatus.PROCESSING)
             logger.info(f"Job status updated to PROCESSING", job_id=job_id, macwhisper_pid=pid)
 
-            # Transcribir
+            # Transcribir con timeout dinámico basado en tamaño
+            file_size_mb = getattr(job, 'file_size_mb', 1.0)
+            dynamic_timeout = monitoring.calculate_dynamic_timeout(file_size_mb)
+
             service = MacWhisperService()
-            result = await service.transcribe_async(temp_file, job_id, original_filename)
+            result = await service.transcribe_async(
+                temp_file,
+                job_id,
+                original_filename,
+                timeout=dynamic_timeout
+            )
 
             # Validar resultado
             if not result or not result.get('text'):
@@ -767,28 +780,51 @@ async def process_job(job_id: str, temp_file: str, original_filename: str):
 async def watchdog_task():
     """
     Tarea de background que monitorea y recupera estados inconsistentes.
+
+    Mejoras:
+    - Usa timeout dinámico basado en tamaño del archivo
+    - Detecta jobs stuck más rápido (1.5x del timeout esperado)
+    - Limpia archivos huérfanos del watched folder
     """
     logger.info("Watchdog task started")
 
     while True:
         try:
-            await asyncio.sleep(60)  # Check cada minuto
+            await asyncio.sleep(30)  # Check cada 30 segundos (era 60)
 
             # 1. Detectar y limpiar jobs stuck
             stuck_count = 0
             for job_id, job in list(job_queue.jobs.items()):
                 if job.status == JobStatus.PROCESSING and job.started_at:
                     elapsed = time.time() - job.started_at
-                    if elapsed > 1800:  # 30 minutos
+
+                    # Calcular timeout esperado para este job
+                    file_size_mb = getattr(job, 'file_size_mb', 1.0)
+                    expected_timeout = monitoring.calculate_dynamic_timeout(file_size_mb)
+
+                    # Si excede 1.5x el timeout esperado, considerar stuck
+                    max_allowed = expected_timeout * 1.5
+
+                    if elapsed > max_allowed:
                         logger.warning(
-                            f"Watchdog: Job stuck for {elapsed/60:.1f} minutes",
-                            job_id=job_id
+                            f"Watchdog: Job stuck for {elapsed:.0f}s (max allowed: {max_allowed:.0f}s)",
+                            job_id=job_id,
+                            file_size_mb=file_size_mb,
+                            expected_timeout=expected_timeout
                         )
                         job_queue.update_job_status(
                             job_id, JobStatus.TIMEOUT,
-                            error=f"Watchdog: stuck for {elapsed/60:.1f} minutes"
+                            error=f"Watchdog: stuck for {elapsed/60:.1f} minutes (expected max {max_allowed/60:.1f} min)"
                         )
                         stuck_count += 1
+
+                        # Limpiar archivos del watched folder para este job
+                        try:
+                            from src.file_watcher import TranscriptionWatcher
+                            watcher = TranscriptionWatcher()
+                            watcher.cleanup_files(job_id)
+                        except Exception as cleanup_err:
+                            logger.error(f"Failed to cleanup stuck job files: {cleanup_err}", job_id=job_id)
 
             if stuck_count:
                 logger.warning(f"Watchdog cleaned {stuck_count} stuck jobs")
@@ -878,6 +914,30 @@ def main():
 
     # Background tasks
     async def start_background_tasks(app):
+        # AUTO-START: Asegurar que MacWhisper esté corriendo al iniciar
+        logger.info("Checking MacWhisper status at startup...")
+        is_running, pid = monitoring.is_macwhisper_running()
+
+        if not is_running:
+            logger.warning("MacWhisper not running at startup, attempting to start...")
+            try:
+                subprocess.run(['open', '-a', 'MacWhisper'], capture_output=True, timeout=10)
+                # Esperar a que inicie
+                for i in range(15):  # Esperar hasta 15 segundos
+                    await asyncio.sleep(1)
+                    is_running, pid = monitoring.is_macwhisper_running()
+                    if is_running:
+                        logger.info(f"MacWhisper started successfully at startup (PID: {pid})")
+                        break
+
+                if not is_running:
+                    logger.error("Failed to start MacWhisper at startup - transcriptions will fail!")
+            except Exception as e:
+                logger.error(f"Error starting MacWhisper at startup: {e}")
+        else:
+            logger.info(f"MacWhisper already running at startup (PID: {pid})")
+
+        # Iniciar tareas de background
         app['cleanup_task'] = asyncio.create_task(job_queue.start_cleanup_task())
         app['watchdog_task'] = asyncio.create_task(watchdog_task())
 

@@ -29,11 +29,17 @@ WATCHED_FOLDER = WATCHED_INPUT_DIR
 # - Auto-Transcribe: Enabled
 
 # Queue System
-MAX_CONCURRENT_JOBS = 1  # Máximo de transcripciones simultáneas (reducido para evitar sobrecarga)
+MAX_CONCURRENT_JOBS = 1  # Máximo de transcripciones simultáneas
 MAX_QUEUE_SIZE = 50  # Máximo de jobs en cola
-JOB_TIMEOUT = 600  # 10 minutos timeout por job (base - se calcula dinámicamente)
-JOB_TIMEOUT_PER_MB = 10  # Segundos adicionales por MB de archivo
-MAX_JOB_TIMEOUT = 1800  # 30 minutos timeout máximo
+
+# Timeouts - OPTIMIZADOS para respuesta rápida
+# Para un archivo de 1MB: 60 + (1 * 30) = 90 segundos
+# Para un archivo de 10MB: 60 + (10 * 30) = 360 segundos (6 min)
+MIN_JOB_TIMEOUT = 60  # 1 minuto mínimo (archivos pequeños)
+JOB_TIMEOUT = 60  # Base timeout en segundos (era 600)
+JOB_TIMEOUT_PER_MB = 30  # Segundos adicionales por MB (era 10)
+MAX_JOB_TIMEOUT = 600  # 10 minutos máximo (era 1800)
+
 MAX_RETRIES = 2  # Número máximo de reintentos para jobs con timeout
 POLLING_INTERVAL = 0.5  # Segundos entre polls para detectar output
 
