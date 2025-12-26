@@ -51,7 +51,7 @@ MAX_QUEUE_SIZE = 50  # Máximo de jobs en cola
 # │ 5+ horas     │ 30+ MB   │ 600s (max)     │ 540s (max)     │
 # └──────────────┴──────────┴────────────────┴────────────────┘
 #
-MIN_JOB_TIMEOUT = 20  # 20 segundos mínimo (da margen para cold start de MacWhisper)
+MIN_JOB_TIMEOUT = 30  # 30 segundos mínimo (margen para cold start + archivos cortos)
 JOB_TIMEOUT = 20  # Base timeout en segundos
 JOB_TIMEOUT_PER_MB = 25  # Segundos adicionales por MB
 MAX_JOB_TIMEOUT = 540  # 9 minutos máximo (10% menos que cliente)

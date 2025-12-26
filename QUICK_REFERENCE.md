@@ -108,7 +108,7 @@ const maxTimeout = 600000;      // ← cambiar
 
 ```python
 # src/config.py
-MIN_JOB_TIMEOUT = 20       # 20s mínimo (cold start)
+MIN_JOB_TIMEOUT = 30       # 30s mínimo (cold start + archivos cortos)
 JOB_TIMEOUT = 20           # Base timeout
 JOB_TIMEOUT_PER_MB = 25    # 25s por MB
 MAX_JOB_TIMEOUT = 540      # 9 min máximo
