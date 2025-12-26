@@ -63,6 +63,12 @@ cd macwhisper-transcription-api
 
 1. **macOS** con Python 3.9+
 2. **MacWhisper Pro** instalado y con licencia activa
+3. **ffmpeg** para conversión de formatos (opus, ogg, webm → mp3)
+
+```bash
+# Instalar ffmpeg
+brew install ffmpeg
+```
 
 ### Pasos
 
@@ -165,14 +171,25 @@ Edita `src/config.py`:
 | `PORT` | 3001 | Puerto del servidor |
 | `MAX_CONCURRENT_JOBS` | 1 | Transcripciones simultáneas |
 | `MAX_QUEUE_SIZE` | 50 | Tamaño máximo de cola |
-| `JOB_TIMEOUT` | 600 | Timeout base (segundos) |
-| `JOB_TIMEOUT_PER_MB` | 10 | Segundos extra por MB |
-| `MAX_JOB_TIMEOUT` | 1800 | Timeout máximo (30 min) |
+| `MIN_JOB_TIMEOUT` | 60 | Timeout mínimo (1 minuto) |
+| `JOB_TIMEOUT` | 60 | Timeout base (segundos) |
+| `JOB_TIMEOUT_PER_MB` | 30 | Segundos extra por MB |
+| `MAX_JOB_TIMEOUT` | 600 | Timeout máximo (10 min) |
 | `MAX_RETRIES` | 2 | Reintentos en timeout |
 | `RATE_LIMIT_PER_MINUTE` | 10 | Requests/min por IP |
 | `MAX_FILE_SIZE_MB` | 500 | Tamaño máximo de archivo |
 | `KEEP_AUDIO_FILES` | True | Conservar audios procesados |
 | `KEEP_TRANSCRIPTION_FILES` | True | Conservar .txt procesados |
+
+### Conversión Automática de Formatos
+
+MacWhisper watched folders solo detectan ciertos formatos (mp3, m4a, wav, flac).
+La API convierte automáticamente formatos no soportados:
+
+| Formato Original | Acción |
+|-----------------|--------|
+| mp3, m4a, wav, flac, aiff | Copia directa |
+| opus, ogg, webm, wma, amr, aac | Conversión a MP3 (requiere ffmpeg) |
 
 ## LaunchDaemon (Auto-start)
 
